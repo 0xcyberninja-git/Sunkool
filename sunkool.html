@@ -1,0 +1,655 @@
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Automotive LED QC – Web Form & Editable Table</title>
+    <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+  </head>
+  <body class="bg-gray-50">
+    <div id="root"></div>
+    <script type="text/babel">
+      const { useEffect, useMemo, useState } = React;
+
+      const Section = ({ title, children }) => (
+        <div className="bg-white rounded-2xl shadow p-5 mb-6 border border-gray-100">
+          <h2 className="text-xl font-semibold mb-4">{title}</h2>
+          <div className="grid gap-4">{children}</div>
+        </div>
+      );
+
+      const FieldRow = ({ label, children, note, onNoteChange }) => (
+        <div className="grid grid-cols-1 lg:grid-cols-12 items-start gap-3">
+          <label className="lg:col-span-3 text-sm font-medium text-gray-700">{label}</label>
+          <div className="lg:col-span-6">{children}</div>
+          <div className="lg:col-span-3 flex items-start gap-2">
+            <span className="text-xs text-gray-500 mt-2">Note</span>
+            <input
+              className="w-full rounded-xl border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              placeholder="Add a note…"
+              value={note || ""}
+              onChange={(e) => onNoteChange?.(e.target.value)}
+            />
+          </div>
+        </div>
+      );
+
+      const ToggleGroup = ({ value, onChange, options }) => (
+        <div className="inline-flex rounded-xl border border-gray-300 overflow-hidden">
+          {options.map((opt) => (
+            <button
+              key={opt.value}
+              type="button"
+              onClick={() => onChange(opt.value)}
+              className={
+                "px-3 py-2 text-sm transition border-r last:border-r-0 " +
+                (value === opt.value
+                  ? "bg-indigo-600 text-white border-indigo-600"
+                  : "bg-white text-gray-700 hover:bg-gray-50 border-gray-300")
+              }
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      );
+
+      const TextInput = (props) => (
+        <input
+          {...props}
+          className={
+            "w-full rounded-xl border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 " +
+            (props.className || "")
+          }
+        />
+      );
+
+      const Select = ({ options, ...props }) => (
+        <select
+          {...props}
+          className="w-full rounded-xl border border-gray-300 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+        >
+          <option value="">Select…</option>
+          {options.map((o) => (
+            <option key={o} value={o}>{o}</option>
+          ))}
+        </select>
+      );
+
+      const Check = ({ checked, onChange, label }) => (
+        <label className="inline-flex items-center gap-2 select-none">
+          <input
+            type="checkbox"
+            className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+            checked={!!checked}
+            onChange={(e) => onChange(e.target.checked)}
+          />
+          <span className="text-sm text-gray-800">{label}</span>
+        </label>
+      );
+
+      const uid = () => Math.random().toString(36).slice(2, 9);
+
+      const DEFAULT_FORM = {
+        meta: { date: new Date().toISOString().slice(0, 10), inspector: "", supplier: "" },
+        supplierVerification: {
+          companyRegistration: { status: "", note: "" },
+          factoryAddressVerified: { status: "", note: "" },
+          isoCertification: { status: "", note: "" },
+          pastExportReferences: { status: "", note: "" },
+          onlineReviewsChecked: { status: "", note: "" },
+        },
+        technicalSpecs: {
+          ledChipBrand: { value: "", note: "" },
+          chipSizePlacement: { value: "", note: "" },
+          lumenOutput: { value: "", note: "" },
+          colorTemperature: { value: "", note: "" },
+          cri: { value: "", note: "" },
+          beamPatternCompatibility: { value: "", note: "" },
+          powerConsumption: { value: "", note: "" },
+          driverType: { value: "", note: "" },
+          voltageRange: { value: "", note: "" },
+          operatingTemp: { value: "", note: "" },
+          waterproof: { value: "", note: "" },
+          housingMaterial: { value: "", note: "" },
+          lensMaterial: { value: "", note: "" },
+          coolingSystem: { value: "", note: "" },
+          certifications: { value: [], note: "" },
+        },
+        incomingQCTests: {
+          integratingSphere: { status: "", note: "" },
+          beamPatternTest: { status: "", note: "" },
+          luxMeasurement: { status: "", note: "" },
+          thermalImaging: { status: "", note: "" },
+          voltageStability: { status: "", note: "" },
+          agingTest: { status: "", note: "" },
+          waterproofTest: { status: "", note: "" },
+          vibrationTest: { status: "", note: "" },
+          impactTest: { status: "", note: "" },
+        },
+        roadPenetration: {
+          chipPositionMatchesOEM: { status: "", note: "" },
+          testInRealHeadlights: { status: "", note: "" },
+          luxPrioritised: { status: "", note: "" },
+          avoidHighCCT: { status: "", note: "" },
+        },
+        documentation: {
+          testReports: { status: "", note: "" },
+          beamPatternPhotos: { status: "", note: "" },
+          realRoadMedia: { status: "", note: "" },
+          batchSerialLog: { status: "", note: "" },
+        },
+      };
+
+      const chipBrands = ["Cree", "Osram", "Lumileds", "Nichia", "Seoul Semiconductor","Others"];
+      const yesNo = [
+        { value: "yes", label: "✓ Yes" },
+        { value: "no", label: "✗ No" },
+        { value: "na", label: "N/A" },
+      ];
+      const passFail = [
+        { value: "pass", label: "Pass" },
+        { value: "fail", label: "Fail" },
+        { value: "na", label: "N/A" },
+      ];
+      const beamTypes = ["Reflector", "Projector","Others"];
+      const driverTypes = ["Constant-current (EMC)", "CANBUS", "Others"];
+      const cooling = ["Fan (dual bearing)", "Fanless heatsink","Others"];
+      const certs = ["ECE R112/R7", "DOT/SAE", "CE", "RoHS","Other"];
+
+      function App() {
+        const [tab, setTab] = useState("form");
+        const [form, setForm] = useState(DEFAULT_FORM);
+        const [records, setRecords] = useState(() => {
+          try {
+            const raw = localStorage.getItem("qc_records_v1");
+            return raw ? JSON.parse(raw) : [];
+          } catch {
+            return [];
+          }
+        });
+        const [editingId, setEditingId] = useState(null);
+        // --- New state for analytics filter ---
+        const [compareA, setCompareA] = useState("");
+        const [compareB, setCompareB] = useState("");
+
+        useEffect(() => {
+          localStorage.setItem("qc_records_v1", JSON.stringify(records));
+        }, [records]);
+
+        const startNew = () => {
+          setForm(DEFAULT_FORM);
+          setTab("form");
+          setEditingId(null);
+        };
+
+        const saveRecord = () => {
+          const id = editingId || uid();
+          const payload = { id, createdAt: new Date().toISOString(), data: form };
+          setRecords((prev) => {
+            const exists = prev.some((r) => r.id === id);
+            return exists ? prev.map((r) => (r.id === id ? payload : r)) : [payload, ...prev];
+          });
+          setEditingId(id);
+          setTab("table");
+        };
+
+        const editRecord = (id) => {
+          const rec = records.find((r) => r.id === id);
+          if (!rec) return;
+          setForm(rec.data);
+          setEditingId(id);
+          setTab("form");
+        };
+
+        const deleteRecord = (id) => {
+          if (!confirm("Delete this record?")) return;
+          setRecords((prev) => prev.filter((r) => r.id !== id));
+          if (editingId === id) startNew();
+        };
+
+        const exportJSON = () => {
+          const blob = new Blob([JSON.stringify(records, null, 2)], { type: "application/json" });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = `led_qc_records_${new Date().toISOString().slice(0,10)}.json`;
+          a.click();
+          URL.revokeObjectURL(url);
+        };
+
+        const importJSON = (file) => {
+          const reader = new FileReader();
+          reader.onload = () => {
+            try {
+              const data = JSON.parse(reader.result);
+              if (Array.isArray(data)) setRecords(data.concat([]));
+              else alert("Invalid JSON structure");
+            } catch (e) {
+              alert("Failed to parse JSON");
+            }
+          };
+          reader.readAsText(file);
+        };
+
+        const rows = useMemo(
+          () =>
+            records.map((r) => {
+              const d = r.data;
+              return {
+                id: r.id,
+                date: d.meta.date,
+                inspector: d.meta.inspector,
+                supplier: d.meta.supplier,
+                brand: d.technicalSpecs.ledChipBrand.value,
+                lumen: d.technicalSpecs.lumenOutput.value,
+                cct: d.technicalSpecs.colorTemperature.value,
+                passFail:
+                  Object.values(d.incomingQCTests).every((x) => x.status === "pass")
+                    ? "All Pass"
+                    : "Mixed",
+              };
+            }),
+          [records]
+        );
+
+        const setDeep = (path, updater) => {
+          setForm((prev) => {
+            const next = structuredClone(prev);
+            let ref = next;
+            for (let i = 0; i < path.length - 1; i++) ref = ref[path[i]];
+            const last = path[path.length - 1];
+            const oldVal = ref[last];
+            ref[last] = typeof updater === "function" ? updater(oldVal) : updater;
+            return next;
+          });
+        };
+
+        // --- Analytics helpers ---
+        const getNumeric = (val) => {
+          const n = parseFloat(val);
+          return isNaN(n) ? null : n;
+        };
+        const getStats = (field) => {
+          const nums = records.map(r => getNumeric(r.data.technicalSpecs[field]?.value)).filter(v => v !== null);
+          if (!nums.length) return null;
+          const min = Math.min(...nums);
+          const max = Math.max(...nums);
+          const avg = nums.reduce((a, b) => a + b, 0) / nums.length;
+          return { min, max, avg, count: nums.length };
+        };
+
+        // --- Filtered records for comparison ---
+        const filteredRecords = React.useMemo(() => {
+          if (compareA && compareB && compareA !== compareB) {
+            return records.filter(r => r.id === compareA || r.id === compareB);
+          }
+          // Default: show the two most recent
+          return records.slice(0, 2);
+        }, [records, compareA, compareB]);
+
+        return (
+          <div className="min-h-screen bg-gray-50 text-gray-900">
+            <header className="sticky top-0 z-10 backdrop-blur bg-white/80 border-b border-gray-200">
+              <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="h-9 w-9 rounded-2xl bg-indigo-600 text-white grid place-items-center font-bold">QC</div>
+                  <div>
+                    <h1 className="text-lg font-semibold">Automotive LED – Supplier & QC Inspection</h1>
+                    <p className="text-xs text-gray-500">Form with per-field notes + editable records table</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button onClick={startNew} className="px-3 py-2 rounded-xl border bg-white hover:bg-gray-50 text-sm">New</button>
+                  <button onClick={exportJSON} className="px-3 py-2 rounded-xl border bg-white hover:bg-gray-50 text-sm">Export</button>
+                  <label className="px-3 py-2 rounded-xl border bg-white text-sm cursor-pointer hover:bg-gray-50">
+                    Import
+                    <input type="file" accept="application/json" className="hidden" onChange={(e) => e.target.files?.[0] && importJSON(e.target.files[0])} />
+                  </label>
+                </div>
+              </div>
+              <nav className="max-w-6xl mx-auto px-4 pb-3 flex gap-2">
+                {[
+                  { id: "form", label: "New Inspection" },
+                  { id: "table", label: "Records" },
+                  { id: "analytics", label: "Data Analytics" },
+                ].map((t) => (
+                  <button
+                    key={t.id}
+                    onClick={() => setTab(t.id)}
+                    className={`px-3 py-2 rounded-xl text-sm border ${tab === t.id ? "bg-indigo-600 text-white border-indigo-600" : "bg-white hover:bg-gray-50"}`}
+                  >
+                    {t.label}
+                  </button>
+                ))}
+              </nav>
+            </header>
+
+            <main className="max-w-6xl mx-auto px-4 py-6">
+              {tab === "form" && (
+                <div className="space-y-6">
+                  <Section title="Inspection Details">
+                    <FieldRow
+                      label="Date"
+                      note={form.meta.noteDate}
+                      onNoteChange={(v) => setDeep(["meta", "noteDate"], v)}
+                    >
+                      <TextInput type="date" value={form.meta.date} onChange={(e) => setDeep(["meta", "date"], e.target.value)} />
+                    </FieldRow>
+                    <FieldRow
+                      label="Inspector Name"
+                      note={form.meta.noteInspector}
+                      onNoteChange={(v) => setDeep(["meta", "noteInspector"], v)}
+                    >
+                      <TextInput value={form.meta.inspector} placeholder=" " onChange={(e) => setDeep(["meta", "inspector"], e.target.value)} />
+                    </FieldRow>
+                    <FieldRow
+                      label="Supplier / Factory"
+                      note={form.meta.noteSupplier}
+                      onNoteChange={(v) => setDeep(["meta", "noteSupplier"], v)}
+                    >
+                      <TextInput value={form.meta.supplier} placeholder=" " onChange={(e) => setDeep(["meta", "supplier"], e.target.value)} />
+                    </FieldRow>
+                  </Section>
+
+                  <Section title="1 — Supplier Verification">
+                    {[
+                      ["companyRegistration", "Company Registration & Business License"],
+                      ["factoryAddressVerified", "Factory Address Verified (Video/Photos)"],
+                      ["isoCertification", "ISO 9001 / TS16949 Certification"],
+                      ["pastExportReferences", "Past Export References"],
+                      ["onlineReviewsChecked", "Online Reviews / Export History Checked"],
+                    ].map(([key, label]) => (
+                      <FieldRow key={key} label={label} note={form.supplierVerification[key].note} onNoteChange={(v) => setDeep(["supplierVerification", key, "note"], v)}>
+                        <ToggleGroup value={form.supplierVerification[key].status} onChange={(v) => setDeep(["supplierVerification", key, "status"], v)} options={yesNo} />
+                      </FieldRow>
+                    ))}
+                  </Section>
+
+                  <Section title="2 — Technical Specifications">
+                    <FieldRow label="LED Chip Brand" note={form.technicalSpecs.ledChipBrand.note} onNoteChange={(v) => setDeep(["technicalSpecs", "ledChipBrand", "note"], v)}>
+                      <Select value={form.technicalSpecs.ledChipBrand.value} onChange={(e) => setDeep(["technicalSpecs", "ledChipBrand", "value"], e.target.value)} options={["Cree","Osram","Lumileds","Nichia","Seoul Semiconductor","Others"]} />
+                    </FieldRow>
+                    <FieldRow label="Chip Size & Placement (Matches halogen filament position)" note={form.technicalSpecs.chipSizePlacement.note} onNoteChange={(v) => setDeep(["technicalSpecs", "chipSizePlacement", "note"], v)}>
+                      <TextInput placeholder=" " value={form.technicalSpecs.chipSizePlacement.value} onChange={(e) => setDeep(["technicalSpecs", "chipSizePlacement", "value"], e.target.value)} />
+                    </FieldRow>
+                    <FieldRow label="Lumen Output ( ≥ 4,000 lm/pair ) (pair)" note={form.technicalSpecs.lumenOutput.note} onNoteChange={(v) => setDeep(["technicalSpecs", "lumenOutput", "note"], v)}>
+                      <TextInput placeholder=" " value={form.technicalSpecs.lumenOutput.value} onChange={(e) => setDeep(["technicalSpecs", "lumenOutput", "value"], e.target.value)} />
+                    </FieldRow>
+                    <FieldRow label="Color Temperature (5,000–6,000K) (K)" note={form.technicalSpecs.colorTemperature.note} onNoteChange={(v) => setDeep(["technicalSpecs", "colorTemperature", "note"], v)}>
+                      <TextInput placeholder=" " value={form.technicalSpecs.colorTemperature.value} onChange={(e) => setDeep(["technicalSpecs", "colorTemperature", "value"], e.target.value)} />
+                    </FieldRow>
+                    <FieldRow label="CRI (≥ 70) "  note={form.technicalSpecs.cri.note} onNoteChange={(v) => setDeep(["technicalSpecs", "cri", "note"], v)}>
+                      <TextInput placeholder=" " value={form.technicalSpecs.cri.value} onChange={(e) => setDeep(["technicalSpecs", "cri", "value"], e.target.value)} />
+                    </FieldRow>
+                    <FieldRow label="Beam Pattern Compatibility" note={form.technicalSpecs.beamPatternCompatibility.note} onNoteChange={(v) => setDeep(["technicalSpecs", "beamPatternCompatibility", "note"], v)}>
+                      <Select value={form.technicalSpecs.beamPatternCompatibility.value} onChange={(e) => setDeep(["technicalSpecs", "beamPatternCompatibility", "value"], e.target.value)} options={["Reflector","Projector","Others"]} />
+                    </FieldRow>
+                    <FieldRow label="Power Consumption (W/bulb) (25–40W/bulb)" note={form.technicalSpecs.powerConsumption.note} onNoteChange={(v) => setDeep(["technicalSpecs", "powerConsumption", "note"], v)}>
+                      <TextInput placeholder=" " value={form.technicalSpecs.powerConsumption.value} onChange={(e) => setDeep(["technicalSpecs", "powerConsumption", "value"], e.target.value)} />
+                    </FieldRow>
+                    <FieldRow label="Driver Type" note={form.technicalSpecs.driverType.note} onNoteChange={(v) => setDeep(["technicalSpecs", "driverType", "note"], v)}>
+                      <Select value={form.technicalSpecs.driverType.value} onChange={(e) => setDeep(["technicalSpecs", "driverType", "value"], e.target.value)} options={["Constant-current (EMC)","CANBUS","Other"]} />
+                    </FieldRow>
+                    <FieldRow label="Voltage Range (V) (9–32V)" note={form.technicalSpecs.voltageRange.note} onNoteChange={(v) => setDeep(["technicalSpecs", "voltageRange", "note"], v)}>
+                      <TextInput placeholder=" " value={form.technicalSpecs.voltageRange.value} onChange={(e) => setDeep(["technicalSpecs", "voltageRange", "value"], e.target.value)} />
+                    </FieldRow>
+                    <FieldRow label="Operating Temperature ( -40 to +105 )(°C)" note={form.technicalSpecs.operatingTemp.note} onNoteChange={(v) => setDeep(["technicalSpecs", "operatingTemp", "note"], v)}>
+                      <TextInput placeholder=" " value={form.technicalSpecs.operatingTemp.value} onChange={(e) => setDeep(["technicalSpecs", "operatingTemp", "value"], e.target.value)} />
+                    </FieldRow>
+                    <FieldRow label="Waterproof / Dustproof" note={form.technicalSpecs.waterproof.note} onNoteChange={(v) => setDeep(["technicalSpecs", "waterproof", "note"], v)}>
+                      <Select value={form.technicalSpecs.waterproof.value} onChange={(e) => setDeep(["technicalSpecs", "waterproof", "value"], e.target.value)} options={["IP67","IP68","Others"]} />
+                    </FieldRow>
+                    <FieldRow label="Housing Material (6063 aluminum) " note={form.technicalSpecs.housingMaterial.note} onNoteChange={(v) => setDeep(["technicalSpecs", "housingMaterial", "note"], v)}>
+                      <TextInput placeholder=" " value={form.technicalSpecs.housingMaterial.value} onChange={(e) => setDeep(["technicalSpecs", "housingMaterial", "value"], e.target.value)} />
+                    </FieldRow>
+                    <FieldRow label="Lens Material (PMMA / Polycarbonate (UV-resistant))" note={form.technicalSpecs.lensMaterial.note} onNoteChange={(v) => setDeep(["technicalSpecs", "lensMaterial", "note"], v)}>
+                      <TextInput placeholder=" " value={form.technicalSpecs.lensMaterial.value} onChange={(e) => setDeep(["technicalSpecs", "lensMaterial", "value"], e.target.value)} />
+                    </FieldRow>
+                    <FieldRow label="Cooling System" note={form.technicalSpecs.coolingSystem.note} onNoteChange={(v) => setDeep(["technicalSpecs", "coolingSystem", "note"], v)}>
+                      <Select value={form.technicalSpecs.coolingSystem.value} onChange={(e) => setDeep(["technicalSpecs", "coolingSystem", "value"], e.target.value)} options={["Fan (dual bearing)","Fanless heatsink","Others"]} />
+                    </FieldRow>
+                    <FieldRow label="Certifications" note={form.technicalSpecs.certifications.note} onNoteChange={(v) => setDeep(["technicalSpecs", "certifications", "note"], v)}>
+                      <div className="flex flex-wrap gap-3">
+                        {certs.map((c) => (
+                          <Check
+                            key={c}
+                            label={c}
+                            checked={form.technicalSpecs.certifications.value.includes(c)}
+                            onChange={(checked) =>
+                              setDeep(["technicalSpecs", "certifications", "value"], (old) => {
+                                const set = new Set(old);
+                                if (checked) set.add(c);
+                                else set.delete(c);
+                                return Array.from(set);
+                              })
+                            }
+                          />
+                        ))}
+                      </div>
+                    </FieldRow>
+                  </Section>
+
+                  <Section title="3 — Incoming QC Tests">
+                    {[
+                      ["integratingSphere", "Integrating Sphere Test (Lumen/Color/CRI)"],
+                      ["beamPatternTest", "Beam Pattern Test (25ft wall projection)"],
+                      ["luxMeasurement", "Lux Measurement (≥ 20,000 lux at hotspot @25ft)"],
+                      ["thermalImaging", "Thermal Imaging Test (≤ 90°C @ 30 min)"],
+                      ["voltageStability", "Voltage Stability (9–16V without flicker)"],
+                      ["agingTest", "Aging Test (24h continuous burn-in)"],
+                      ["waterproofTest", "Waterproof Test (1m for 30 min)"],
+                      ["vibrationTest", "Vibration Test (simulated road bumps 30 min)"],
+                      ["impactTest", "Impact Test (drop 1m onto rubber surface)"],
+                    ].map(([key, label]) => (
+                      <FieldRow key={key} label={label} note={form.incomingQCTests[key].note} onNoteChange={(v) => setDeep(["incomingQCTests", key, "note"], v)}>
+                        <ToggleGroup value={form.incomingQCTests[key].status} onChange={(v) => setDeep(["incomingQCTests", key, "status"], v)} options={passFail} />
+                      </FieldRow>
+                    ))}
+                  </Section>
+
+                  <Section title="4 — Road Penetration Checks">
+                    {[
+                      ["chipPositionMatchesOEM", "LED chip position matches OEM filament"],
+                      ["testInRealHeadlights", "Test in real headlights (reflector & projector)"],
+                      ["luxPrioritised", "Lux prioritised over lumens for distance visibility"],
+                      ["avoidHighCCT", "Avoid >6,500K for better rain/fog penetration"],
+                    ].map(([key, label]) => (
+                      <FieldRow key={key} label={label} note={form.roadPenetration[key].note} onNoteChange={(v) => setDeep(["roadPenetration", key, "note"], v)}>
+                        <ToggleGroup value={form.roadPenetration[key].status} onChange={(v) => setDeep(["roadPenetration", key, "status"], v)} options={yesNo} />
+                      </FieldRow>
+                    ))}
+                  </Section>
+
+                  <Section title="5 — Documentation & Records">
+                    {[
+                      ["testReports", "Test Reports (Lumen, IP67, EMC)"],
+                      ["beamPatternPhotos", "Beam Pattern Photos"],
+                      ["realRoadMedia", "Real-road test photos/videos"],
+                      ["batchSerialLog", "Batch Serial Number Log"],
+                    ].map(([key, label]) => (
+                      <FieldRow key={key} label={label} note={form.documentation[key].note} onNoteChange={(v) => setDeep(["documentation", key, "note"], v)}>
+                        <ToggleGroup value={form.documentation[key].status} onChange={(v) => setDeep(["documentation", key, "status"], v)} options={yesNo} />
+                      </FieldRow>
+                    ))}
+                  </Section>
+
+                  <div className="flex items-center gap-3">
+                    <button onClick={saveRecord} className="px-4 py-2 rounded-2xl bg-indigo-600 text-white font-medium shadow hover:shadow-md">
+                      {editingId ? "Update Record" : "Save Record"}
+                    </button>
+                    {editingId && (
+                      <span className="text-sm text-gray-500">
+                        Editing record <code className="bg-gray-100 px-2 py-1 rounded">{editingId}</code>
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {tab === "table" && (
+                <div className="bg-white rounded-2xl shadow p-5 border border-gray-100">
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-lg font-semibold">Saved Records</h2>
+                    <div className="text-sm text-gray-500">Total: {rows.length}</div>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full text-sm">
+                      <thead>
+                        <tr className="text-left text-gray-600 border-b">
+                          <th className="py-2 pr-4">Date</th>
+                          <th className="py-2 pr-4">Inspector</th>
+                          <th className="py-2 pr-4">Supplier</th>
+                          <th className="py-2 pr-4">LED Chip Brand</th>
+                          <th className="py-2 pr-4">Lumen (pair)</th>
+                          <th className="py-2 pr-4">CCT (K)</th>
+                          <th className="py-2 pr-4">QC Result</th>
+                          <th className="py-2 pr-4">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {rows.map((row) => (
+                          <tr key={row.id} className="border-b last:border-b-0 hover:bg-gray-50">
+                            <td className="py-2 pr-4">{row.date}</td>
+                            <td className="py-2 pr-4">{row.inspector}</td>
+                            <td className="py-2 pr-4">{row.supplier}</td>
+                            <td className="py-2 pr-4">{row.brand}</td>
+                            <td className="py-2 pr-4">{row.lumen}</td>
+                            <td className="py-2 pr-4">{row.cct}</td>
+                            <td className="py-2 pr-4">{row.passFail}</td>
+                            <td className="py-2 pr-4">
+                              <div className="flex items-center gap-2">
+                                <button onClick={() => editRecord(row.id)} className="px-3 py-1.5 rounded-xl border bg-white hover:bg-gray-100">Edit</button>
+                                <button onClick={() => deleteRecord(row.id)} className="px-3 py-1.5 rounded-xl border bg-white hover:bg-gray-100">Delete</button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                        {rows.length === 0 && (
+                          <tr>
+                            <td colSpan={8} className="py-8 text-center text-gray-500">No records yet. Save a record from the form.</td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {tab === "analytics" && (
+                <div className="bg-white rounded-2xl shadow p-5 border border-gray-100">
+                  <h2 className="text-lg font-semibold mb-4">Data Analytics & Comparison</h2>
+                  <div className="mb-4">
+                    <h3 className="font-semibold mb-2">Lumen Output (pair)</h3>
+                    {getStats("lumenOutput") ? (
+                      <ul className="list-disc ml-6 text-gray-700">
+                        <li>Min: {getStats("lumenOutput").min}</li>
+                        <li>Max: {getStats("lumenOutput").max}</li>
+                        <li>Average: {getStats("lumenOutput").avg.toFixed(2)}</li>
+                        <li>Count: {getStats("lumenOutput").count}</li>
+                      </ul>
+                    ) : (
+                      <span className="text-gray-400">No data available.</span>
+                    )}
+                  </div>
+                  <div className="mb-4">
+                    <h3 className="font-semibold mb-2">Color Temperature (K)</h3>
+                    {getStats("colorTemperature") ? (
+                      <ul className="list-disc ml-6 text-gray-700">
+                        <li>Min: {getStats("colorTemperature").min}</li>
+                        <li>Max: {getStats("colorTemperature").max}</li>
+                        <li>Average: {getStats("colorTemperature").avg.toFixed(2)}</li>
+                        <li>Count: {getStats("colorTemperature").count}</li>
+                      </ul>
+                    ) : (
+                      <span className="text-gray-400">No data available.</span>
+                    )}
+                  </div>
+                  <div className="mb-4">
+                    <h3 className="font-semibold mb-2">Power Consumption (W/bulb)</h3>
+                    {getStats("powerConsumption") ? (
+                      <ul className="list-disc ml-6 text-gray-700">
+                        <li>Min: {getStats("powerConsumption").min}</li>
+                        <li>Max: {getStats("powerConsumption").max}</li>
+                        <li>Average: {getStats("powerConsumption").avg.toFixed(2)}</li>
+                        <li>Count: {getStats("powerConsumption").count}</li>
+                      </ul>
+                    ) : (
+                      <span className="text-gray-400">No data available.</span>
+                    )}
+                  </div>
+                  <div className="mb-6">
+                    <h3 className="font-semibold mb-2">Side-by-Side Comparison</h3>
+                    {records.length > 1 ? (
+                      <>
+                        <div className="flex gap-4 mb-4">
+                          <div>
+                            <label className="block text-xs text-gray-500 mb-1">Compare Record A</label>
+                            <select className="border rounded px-2 py-1" value={compareA} onChange={e => setCompareA(e.target.value)}>
+                              <option value="">Most Recent</option>
+                              {records.map(r => (
+                                <option key={r.id} value={r.id} disabled={r.id === compareB}>
+                                  {r.data.meta.date} - {r.data.meta.inspector || r.id.slice(-4)}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          <div>
+                            <label className="block text-xs text-gray-500 mb-1">Compare Record B</label>
+                            <select className="border rounded px-2 py-1" value={compareB} onChange={e => setCompareB(e.target.value)}>
+                              <option value="">Second Most Recent</option>
+                              {records.map(r => (
+                                <option key={r.id} value={r.id} disabled={r.id === compareA}>
+                                  {r.data.meta.date} - {r.data.meta.inspector || r.id.slice(-4)}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+                        <div className="overflow-x-auto">
+                          <table className="min-w-full text-xs border">
+                            <thead>
+                              <tr className="bg-gray-100">
+                                <th className="p-2">Field</th>
+                                {filteredRecords.map((r, i) => (
+                                  <th className="p-2" key={r.id}>Record {records.findIndex(rec => rec.id === r.id) + 1}</th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {Object.entries(DEFAULT_FORM.technicalSpecs).map(([key, val]) => (
+                                <tr key={key} className="border-t">
+                                  <td className="p-2 font-medium">{key}</td>
+                                  {filteredRecords.map((r) => (
+                                    <td className="p-2" key={r.id}>{Array.isArray(r.data.technicalSpecs[key].value) ? r.data.technicalSpecs[key].value.join(", ") : r.data.technicalSpecs[key].value}</td>
+                                  ))}
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </>
+                    ) : (
+                      <span className="text-gray-400">At least two records needed for comparison.</span>
+                    )}
+                  </div>
+                </div>
+              )}
+            </main>
+
+            <footer className="max-w-6xl mx-auto px-4 pb-10 pt-4 text-xs text-gray-500">
+              <p>Tip: Every field has a note input on the right. Use Export/Import to back up or move data. Data also persists in your browser (localStorage).</p>
+            </footer>
+          </div>
+        );
+      }
+
+      ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+    </script>
+  </body>
+</html>
+
